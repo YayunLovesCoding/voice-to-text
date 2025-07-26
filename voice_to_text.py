@@ -17,6 +17,7 @@ import wave
 import pyaudio
 import whisper
 import pyautogui
+import pyperclip
 from pynput import keyboard
 from pynput.keyboard import Key
 
@@ -28,6 +29,7 @@ class VoiceToText:
         self.audio_stream = None
         self.p = None
         self.model = None
+        self.pasting = False  # Flag to prevent hotkey conflicts during pasting
         
         # Audio settings
         self.chunk = 1024
@@ -159,17 +161,61 @@ class VoiceToText:
             print(f"Speech-to-text error: {e}")
     
     def type_text(self, text):
-        """Type the text at current cursor position"""
+        """Insert text at current cursor position using fastest method"""
+        # Set pasting flag to prevent hotkey conflicts
+        self.pasting = True
+        
         try:
+            # Method 1: AppleScript paste (most reliable)
+            # Save current clipboard
+            original_clipboard = pyperclip.paste()
+            
+            # Copy our text to clipboard
+            pyperclip.copy(text)
+            time.sleep(0.1)  # Give clipboard time to update
+            
+            # Use AppleScript for reliable paste
+            import subprocess
+            result = subprocess.run([
+                'osascript', '-e', 
+                'tell application "System Events" to keystroke "v" using command down'
+            ], capture_output=True, timeout=3)
+            
+            if result.returncode == 0:
+                print("✅ Text pasted instantly")
+            else:
+                raise Exception(f"AppleScript failed: {result.stderr}")
+            
+            # Restore original clipboard
             time.sleep(0.1)
-            pyautogui.typewrite(text)
-            print("✅ Text typed successfully")
+            pyperclip.copy(original_clipboard)
+            
         except Exception as e:
-            print(f"Typing error: {e}")
+            print(f"Paste failed: {e}")
+            
+            # Method 2: Direct typing with very small interval
+            try:
+                pyautogui.typewrite(text, interval=0.001)  # Faster typing
+                print("✅ Text typed quickly")
+                
+            except Exception as e2:
+                print(f"Quick typing failed: {e2}")
+                
+                # Method 3: Last resort - reliable slow typing
+                pyautogui.typewrite(text, interval=0.01)
+                print("✅ Text typed (reliable method)")
+        
+        finally:
+            # Always reset pasting flag
+            self.pasting = False
     
     def on_key_press(self, key):
         """Handle key press events"""
         try:
+            # Skip hotkey detection when we're pasting to avoid conflicts
+            if self.pasting:
+                return
+                
             self.pressed_keys.add(key)
             if self.hotkey.issubset(self.pressed_keys):
                 if not self.recording:
