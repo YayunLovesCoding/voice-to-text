@@ -18,6 +18,7 @@ import pyaudio
 import whisper
 import pyautogui
 import pyperclip
+import subprocess
 from pynput import keyboard
 from pynput.keyboard import Key
 
@@ -30,6 +31,7 @@ class VoiceToText:
         self.p = None
         self.model = None
         self.pasting = False  # Flag to prevent hotkey conflicts during pasting
+        self.audio_initialized = False
         
         # Audio settings
         self.chunk = 1024
@@ -47,8 +49,17 @@ class VoiceToText:
         print("✅ Ready! Press Control+Option 🎤 to start/stop recording")
     
     def setup_audio(self):
-        """Initialize PyAudio"""
-        self.p = pyaudio.PyAudio()
+        """Initialize PyAudio with error handling"""
+        try:
+            if self.p:
+                self.p.terminate()
+            self.p = pyaudio.PyAudio()
+            self.audio_initialized = True
+            print("🎵 Audio system initialized")
+        except Exception as e:
+            print(f"❌ Failed to initialize audio: {e}")
+            print("💡 Try restarting the application or checking audio permissions")
+            self.audio_initialized = False
     
     def load_whisper_model(self):
         """Load Whisper model"""
@@ -56,31 +67,51 @@ class VoiceToText:
         self.model = whisper.load_model("small")
         print("✅ Whisper model loaded")
     
+    
+    
     def start_recording(self):
-        """Start audio recording"""
+        """Start audio recording with auto-recovery"""
         if self.recording:
             return
+        
+        # Check if audio system is initialized
+        if not self.audio_initialized:
+            print("🔄 Audio not initialized, attempting to reinitialize...")
+            self.setup_audio()
+            if not self.audio_initialized:
+                print("❌ Cannot start recording - audio system unavailable")
+                return
             
         print("🔴 Recording started...")
         self.recording = True
         self.audio_frames = []
         
-        try:
-            self.audio_stream = self.p.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.rate,
-                input=True,
-                frames_per_buffer=self.chunk,
-                input_device_index=None  # Use default microphone
-            )
-            
-            threading.Thread(target=self._record_audio, daemon=True).start()
-            
-        except Exception as e:
-            print(f"❌ Failed to start recording: {e}")
-            print("💡 Check microphone permissions and try again")
-            self.recording = False
+        # Try to start recording with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.audio_stream = self.p.open(
+                    format=self.format,
+                    channels=self.channels,
+                    rate=self.rate,
+                    input=True,
+                    frames_per_buffer=self.chunk,
+                    input_device_index=None  # Use default microphone
+                )
+                
+                threading.Thread(target=self._record_audio, daemon=True).start()
+                return  # Success!
+                
+            except Exception as e:
+                print(f"❌ Recording attempt {attempt + 1} failed: {e}")
+                
+                if attempt < max_retries - 1:
+                    print("🔄 Reinitializing audio and retrying...")
+                    time.sleep(1)
+                    self.setup_audio()
+                else:
+                    print("💡 Check microphone permissions and try again")
+                    self.recording = False
     
     def _record_audio(self):
         """Record audio in background thread"""
@@ -175,7 +206,6 @@ class VoiceToText:
             time.sleep(0.1)  # Give clipboard time to update
             
             # Use AppleScript for reliable paste
-            import subprocess
             result = subprocess.run([
                 'osascript', '-e', 
                 'tell application "System Events" to keystroke "v" using command down'
@@ -252,8 +282,27 @@ class VoiceToText:
     
     def cleanup(self):
         """Clean up resources"""
+        print("🧹 Cleaning up resources...")
+        
+        # Stop any active recording
+        if self.recording:
+            self.recording = False
+            
+        # Clean up audio stream
+        if self.audio_stream:
+            try:
+                if self.audio_stream.is_active():
+                    self.audio_stream.stop_stream()
+                self.audio_stream.close()
+            except:
+                pass
+            finally:
+                self.audio_stream = None
+        
+        # Terminate PyAudio
         if hasattr(self, 'p') and self.p:
             self.p.terminate()
+            
         print("🧹 Cleanup complete")
 
 
