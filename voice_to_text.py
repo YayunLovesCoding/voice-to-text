@@ -15,7 +15,8 @@ import threading
 import tempfile
 import wave
 import pyaudio
-import whisper
+import faster_whisper
+import opencc
 import pyautogui
 import pyperclip
 import subprocess
@@ -46,6 +47,7 @@ class VoiceToText:
         print("🚀 Voice-to-Text starting up...")
         self.setup_audio()
         self.load_whisper_model()
+        self.cc = opencc.OpenCC('t2s')  # Traditional to Simplified converter
         print("✅ Ready! Press Control+Option 🎤 to start/stop recording")
     
     def setup_audio(self):
@@ -62,10 +64,12 @@ class VoiceToText:
             self.audio_initialized = False
     
     def load_whisper_model(self):
-        """Load Whisper model"""
-        print("📥 Loading Whisper model (small for better performance)...")
-        self.model = whisper.load_model("small")
-        print("✅ Whisper model loaded")
+        """Load Faster-Whisper model"""
+        print("📥 Loading Faster-Whisper model (small for speed/accuracy balance)...")
+        # 'small' is accurate and fast with faster-whisper implementation
+        # cpu_threads=4 usually good for M1/M2/M3
+        self.model = faster_whisper.WhisperModel("small", device="cpu", compute_type="int8")
+        print("✅ Faster-Whisper model loaded")
     
     
     
@@ -83,6 +87,8 @@ class VoiceToText:
                 return
             
         print("🔴 Recording started...")
+        # Play start sound
+        subprocess.Popen(["afplay", "/System/Library/Sounds/Ping.aiff"])
         self.recording = True
         self.audio_frames = []
         
@@ -133,6 +139,8 @@ class VoiceToText:
             return
             
         print("⏹️  Recording stopped, processing...")
+        # Play stop sound
+        subprocess.Popen(["afplay", "/System/Library/Sounds/Pop.aiff"])
         self.recording = False
         
         # Give a moment for the recording thread to finish
@@ -171,19 +179,25 @@ class VoiceToText:
                     os.unlink(temp_file.name)
     
     def process_speech_to_text(self, audio_file):
-        """Convert audio to text using Whisper"""
+        """Convert audio to text using Faster-Whisper"""
         try:
             print("🤖 Converting speech to text...")
-            result = self.model.transcribe(
+            segments, info = self.model.transcribe(
                 audio_file,
-                language="en",
-                fp16=False,
-                verbose=False
+                beam_size=5,
+                vad_filter=True  # Built-in VAD to ignore silence
             )
-            text = result["text"].strip()
+            
+            # Combine all segments
+            text = " ".join([segment.text for segment in segments]).strip()
             
             if text:
-                print(f"📝 Transcribed: {text}")
+                # Check for Chinese and convert to Simplified if needed
+                if info.language == "zh":
+                    print("🇨🇳 Detected Chinese, converting to Simplified...")
+                    text = self.cc.convert(text)
+                
+                print(f"📝 Transcribed ({info.language}): {text}")
                 self.type_text(text)
             else:
                 print("❌ No speech detected")
@@ -213,7 +227,13 @@ class VoiceToText:
             
             if result.returncode == 0:
                 print("✅ Text pasted instantly")
+                # Play success sound
+                subprocess.Popen(["afplay", "/System/Library/Sounds/Tink.aiff"])
             else:
+                if "osascript is not allowed to send keystrokes" in str(result.stderr):
+                    print("\n⚠️  PERMISSION ERROR: The application needs Accessibility permissions to paste text.")
+                    print("👉 Go to System Settings > Privacy & Security > Accessibility")
+                    print("👉 Add and enable your Terminal / Editor application")
                 raise Exception(f"AppleScript failed: {result.stderr}")
             
             # Restore original clipboard
