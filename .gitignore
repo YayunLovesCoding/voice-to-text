@@ -62,3 +62,7 @@ Temporary Items
 
 # Whisper cache
 .cache/
+
+# Log files
+*.log
+voicetotext_app.log

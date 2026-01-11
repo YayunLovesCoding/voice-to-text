@@ -41,12 +41,20 @@ python3 voice_to_text.py
 
 ## 🎯 How to Use
 
-1. **Start the app** - You'll see: `✅ Ready! Press Control+Option 🎤 to start/stop recording`
+1. **Start the app** - You'll see a 🎙️ icon in your menu bar
 2. **Position your cursor** anywhere you want text to appear
-3. **Press Control+Option** to start recording (you'll see `🔴 Recording started...`)
+3. **Press and hold Control+Option** to start recording (icon changes to 🔴, you'll hear a "ping" sound)
 4. **Speak clearly** - say whatever you want transcribed
-5. **Press Control+Option again** to stop and transcribe
+5. **Release Control+Option** to stop recording (you'll hear a "pop" sound)
 6. **Text appears instantly** at your cursor position!
+
+### Debug Mode (Optional)
+To enable detailed logging for troubleshooting:
+```bash
+export VOICE_TO_TEXT_DEBUG=true
+python3 voice_to_text.py
+```
+Log file will be created at `~/voicetotext_app.log` and accessible from the app menu.
 
 ## 🔧 System Requirements
 
@@ -119,11 +127,12 @@ python3 voice_to_text.py
 
 ## 🛠️ Technical Details
 
-- **Speech Recognition**: OpenAI Whisper (small model)
+- **Speech Recognition**: OpenAI Faster-Whisper (small model, optimized for speed)
 - **Audio Processing**: PyAudio with 16kHz sampling
-- **Global Hotkeys**: pynput library
-- **Text Insertion**: Clipboard paste via AppleScript
-- **Language**: English (optimized for speed)
+- **Global Hotkeys**: pynput library for keyboard monitoring
+- **Text Insertion**: Clipboard paste via AppleScript (preserves cursor position)
+- **Languages**: Supports English and Chinese (auto-detects, converts traditional to simplified)
+- **UI**: Menu bar app using rumps (macOS native feel)
 
 ## 🤝 Contributing
 
