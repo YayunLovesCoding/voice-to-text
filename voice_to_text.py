@@ -259,9 +259,13 @@ class VoiceToTextApp(rumps.App):
         """Start the keyboard listener"""
         log("Keyboard listener starting...")
         try:
-            with keyboard.Listener(on_press=self.on_key_press, on_release=self.on_key_release) as listener:
-                log("Keyboard listener started successfully")
-                listener.join()
+            listener = keyboard.Listener(
+                on_press=self.on_key_press,
+                on_release=self.on_key_release
+            )
+            listener.start()
+            log("Keyboard listener started successfully")
+            listener.join()
         except Exception as e:
             log(f"Keyboard listener failed: {e}")
             rumps.notification("Error", "Keyboard Listener Error", f"Failed to start: {e}")
@@ -272,11 +276,12 @@ class VoiceToTextApp(rumps.App):
             return
         try:
             self.pressed_keys.add(key)
+            log(f"Key pressed: {key}, Current keys: {self.pressed_keys}")
             
             if self.hotkey.issubset(self.pressed_keys):
                 # Debounce: Only trigger if not already active
                 if not self.hotkey_active:
-                    log("Hotkey detected")
+                    log("Hotkey detected - toggling recording")
                     self.hotkey_active = True
                     if not self.recording:
                         self.start_recording()
@@ -289,6 +294,7 @@ class VoiceToTextApp(rumps.App):
         """Handle key release events"""
         try:
             self.pressed_keys.discard(key)
+            log(f"Key released: {key}")
             # Reset debounce flag if hotkey combo is broken
             if not self.hotkey.issubset(self.pressed_keys):
                 self.hotkey_active = False
